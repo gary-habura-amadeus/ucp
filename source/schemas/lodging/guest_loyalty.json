@@ -1,0 +1,122 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ucp.dev/draft/schemas/lodging/guest_loyalty.json",
+  "name": "dev.ucp.lodging.guest_loyalty",
+  "title": "Lodging Guest Loyalty Extension",
+  "description": "Lets a Platform pass a guest's hotel loyalty membership number to the Business so post-stay rewards can be credited. The number is request-only: the Business never echoes it back. This extension never affects booking status or pricing.",
+  "$defs": {
+    "program": {
+      "type": "string",
+      "description": "Loyalty program key in reverse-domain notation. Must be one of the keys the Business advertises in guest_loyalty.accepted_programs.",
+      "pattern": "^[a-z][a-z0-9-]*(\\.[a-z][a-z0-9-]*)+$",
+      "maxLength": 128,
+      "examples": ["com.example.honors"]
+    },
+    "loyalty_membership_request": {
+      "type": "object",
+      "description": "A loyalty membership number supplied by the buyer for one guest. Request-only.",
+      "required": ["program", "member_id"],
+      "additionalProperties": false,
+      "properties": {
+        "program": { "$ref": "#/$defs/program" },
+        "member_id": {
+          "type": "string",
+          "description": "Membership number exactly as the buyer provided it, trimmed of leading/trailing whitespace. Treated as a sensitive identifier: MUST NOT be echoed by the Business, logged in clear text, or included in analytics.",
+          "minLength": 1,
+          "maxLength": 64
+        }
+      }
+    },
+    "accepted_program": {
+      "type": "object",
+      "description": "A loyalty program the Business can credit for this property or rate.",
+      "required": ["program", "name"],
+      "additionalProperties": false,
+      "properties": {
+        "program": { "$ref": "#/$defs/program" },
+        "name": {
+          "type": "string",
+          "description": "Human-readable program name, suitable for display to the buyer."
+        }
+      }
+    },
+    "membership_status": {
+      "type": "object",
+      "description": "Business-side outcome for one submitted membership. Never contains the member number or a masked form of it.",
+      "required": ["guest_id", "program", "recorded", "provisional"],
+      "additionalProperties": false,
+      "properties": {
+        "guest_id": {
+          "type": "string",
+          "description": "Platform-generated Guest.id the membership was submitted for."
+        },
+        "program": { "$ref": "#/$defs/program" },
+        "recorded": {
+          "type": "boolean",
+          "description": "True if the Business stored the number against the stay for post-stay crediting. False if it was discarded (see messages[])."
+        },
+        "provisional": {
+          "type": "boolean",
+          "description": "True unless the Business has verified the membership (for example via Identity Linking). Mirrors dev.ucp.common.loyalty. display_id is intentionally not defined here."
+        }
+      }
+    },
+    "guest_loyalty": {
+      "type": "object",
+      "description": "Response-only state for the guest loyalty extension.",
+      "additionalProperties": false,
+      "properties": {
+        "accepted_programs": {
+          "type": "array",
+          "description": "Programs the Business can credit. Presence of this list, together with a loyalty_member_id_requested message, authorises the Platform to collect a number.",
+          "items": { "$ref": "#/$defs/accepted_program" },
+          "maxItems": 10
+        },
+        "memberships": {
+          "type": "array",
+          "description": "Outcome for each membership submitted in the most recent Update.",
+          "items": { "$ref": "#/$defs/membership_status" },
+          "maxItems": 50
+        }
+      }
+    },
+    "dev.ucp.lodging.booking": {
+      "title": "Lodging Booking with Guest Loyalty",
+      "description": "Lodging Booking extended with guest loyalty membership capture.",
+      "allOf": [
+        {
+          "$ref": "https://ucp.dev/draft/schemas/lodging/booking.json"
+        },
+        {
+          "type": "object",
+          "properties": {
+            "guests": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "loyalty_memberships": {
+                    "type": "array",
+                    "description": "Loyalty numbers for this guest. Send only on the guest assigned role=primary, only after the Business requested one, and only with buyer consent.",
+                    "items": { "$ref": "#/$defs/loyalty_membership_request" },
+                    "maxItems": 5,
+                    "ucp_request": {
+                      "create": "omit",
+                      "update": "optional",
+                      "complete": "omit"
+                    },
+                    "ucp_response": "omit"
+                  }
+                }
+              }
+            },
+            "guest_loyalty": {
+              "$ref": "#/$defs/guest_loyalty",
+              "ucp_request": "omit"
+            }
+          }
+        }
+      ]
+    }
+  }
+}
